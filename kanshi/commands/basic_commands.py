@@ -31,12 +31,59 @@ def memory_script():
     except Exception as e:
         console.print(f"[red]Error exxecuting command: [/red] {e}")
 
+def os_info():
+    result = subprocess.run("uname -a", shell=True, capture_output=True, text=True)
+    console.print(result.stdout)
+
+
+def ping_test():
+    result = subprocess.run("ping -c 4 google.com", shell=True, capture_output=True, text=True)
+    console.print(result.stdout)
+
+
+def network_info():
+    result = subprocess.run("ip a", shell=True, capture_output=True, text=True)
+    console.print(result.stdout)
+
+
+def running_processes():
+    result = subprocess.run("ps -eo pid,cmd,%cpu,%mem --sort=-%cpu | head", 
+                            shell=True, capture_output=True, text=True)
+    console.print(result.stdout)
+
+
+def uptime():
+    result = subprocess.run("uptime -p", shell=True, capture_output=True, text=True)
+    console.print(f"[cyan]System Uptime:[/cyan] {result.stdout}")
+
+
+def disk_usage():
+    result = subprocess.run("df -h", shell=True, capture_output=True, text=True)
+    console.print(result.stdout)
+
+
+def cpu_usage():
+    result = subprocess.run("top -bn1 | grep 'Cpu(s)'", shell=True,
+                            capture_output=True, text=True)
+    console.print(result.stdout)
+
+
+def cpu_info():
+    result = subprocess.run("lscpu", shell=True, capture_output=True, text=True)
+    console.print(result.stdout)
+
+
 
 
 def handle_intent(intent: str, user_input: Optional[str] = None):
-    if intent == "memory script":
-        #Return the function to be executed by the router
-        return memory_script
+    if intent == "memory script": return memory_script
+    if intent == "cpu info": return cpu_info
+    if intent == "disk usage": return disk_usage
+    if intent == "uptime": return uptime
+    if intent == "process list": return running_processes
+    if intent == "network info": return network_info
+    if intent == "ping test": return ping_test
+    if intent == "os info": return os_info
 
     console.print(f"[yellow]Unknown intent[/yellow] {intent}")
     return None
