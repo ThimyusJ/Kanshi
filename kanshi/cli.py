@@ -1,5 +1,7 @@
 import typer
 from rich.console import Console
+from core import intents
+from core import router
 
 app = typer.Typer(help="Kanshi - CLI system monitoring agent for Linux")
 console = Console()
@@ -10,9 +12,13 @@ def start():
     while True:
         try: 
             user_input = input("> ").strip()
+
             if not user_input: continue
             if user_input.lower() in {"exit", "quit"}:
                 console.print("[bold red]Shutting Down...[/bold red]"); break
+            
+            payload = intents.parse_intent(user_input)
+            router.route(payload)
             
         except (KeyboardInterrupt, EOFError):
             console.print("\n[bold red]Interrupted. Shutting Down...[/bold red]"); break
@@ -21,7 +27,9 @@ def start():
 
 @app.command()
 def run(command: str = typer.Argument(..., help="One Shot command, e.g. get OS info")):
-    pass
+    payload = intents.parse_intent(command)
+
+    router.route(payload)
 
 if __name__ == "__main__":
     app()
