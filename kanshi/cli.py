@@ -55,8 +55,10 @@ def start():
             if user_input.lower() in {"exit", "quit"}:
                 console.print("[bold red]Shutting Down...[/bold red]"); break
             
-            payload = intents.parse_intent(user_input)
-            router.route(payload)
+            
+            intent = intents.parse_intent(user_input)
+            result = router.route(intent, user_input=user_input)
+            render_result(result)
             
         except (KeyboardInterrupt, EOFError):
             console.print("\n[bold red]Interrupted. Shutting Down...[/bold red]"); break
@@ -65,9 +67,9 @@ def start():
 
 @app.command()
 def run(command: str = typer.Argument(..., help="One Shot command, e.g. get OS info")):
-    payload = intents.parse_intent(command)
-
-    router.route(payload)
+    intent = intents.parse_intent(command)
+    result = router.route(intent, user_input=command)
+    render_result(result)
 
 if __name__ == "__main__":
     app()
