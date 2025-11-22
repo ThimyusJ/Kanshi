@@ -1,89 +1,130 @@
 import subprocess
-from typing import Optional
-from rich.console import Console
+from typing import Optional, Dict, Any
 
-console = Console()
 
-def memory_script():
+def _run_shell(cmd: str) -> Dict[str, Any]:
+    """
+    Helper to run a shell command and normalize the result into a
+    common structure that both CLI and API can use.
+    """
+    result = subprocess.run(
+        cmd, shell=True, capture_output=True, text=True
+    )
+
+    return {
+        "ok": result.returncode == 0,
+        "stdout": (result.stdout or "").strip(),
+        "stderr": (result.stderr or "").strip(),
+        "meta": {
+            "command": cmd,
+            "returncode": result.returncode,
+        },
+    }
+
+
+def memory_script() -> Dict[str, Any]:
+    """
+    Show memory usage using `free -m` and attach a parsed summary
+    in the `meta` field.
+    """
     cmd = "free -m"
-    mem = {}
+    base = _run_shell(cmd)
 
+    parsed = {}
     try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        lines = result.stdout.splitlines()
+        lines = base["stdout"].splitlines()
         for line in lines:
             if line.startswith("Mem:"):
-                _, total, used, free, shared, buff_cache, available = line.split()
-                mem["total"] = int(total)
-                mem["used"] = int(used)
-                mem["free"] = int(free)
+                _, total, used, free, *_ = line.split()
+                total_i = int(total)
+                used_i = int(used)
+                free_i = int(free)
+                free_pct = round((free_i / total_i) * 100, 1) if total_i else 0.0
+                parsed = {
+                    "total_mb": total_i,
+                    "used_mb": used_i,
+                    "free_mb": free_i,
+                    "free_pct": free_pct,
+                }
+                break
+    except Exception as exc:  
+        base.setdefault("meta", {})["parse_error"] = str(exc)
 
-        free_memory = round((mem['free']/mem['total']) * 100)
-
-        if result.stdout:
-            console.print(f"[cyan]Total Memory: {mem['total']} MB[/cyan]")
-            console.print(f"[yellow]Memory Used: {mem['used']} MB {round((mem['used']/mem['total']) * 100)}%[/yellow]")
-            console.print(f"[green]Memory Remaining: {mem['free']} MB {free_memory}%[/green]")
-            if free_memory < 10:
-                console.print(f"[red]Low Memory[/red]")
-        if result.stderr:
-            console.print(f"[red]{result.stderr}[/red]")
-    except Exception as e:
-        console.print(f"[red]Error exxecuting command: [/red] {e}")
-
-def os_info():
-    result = subprocess.run("uname -a", shell=True, capture_output=True, text=True)
-    console.print(result.stdout)
+    base["meta"]["parsed_memory"] = parsed
+    return base
 
 
-def ping_test():
-    result = subprocess.run("ping -c 4 google.com", shell=True, capture_output=True, text=True)
-    console.print(result.stdout)
+def cpu_info() -> Dict[str, Any]:
+    """
+    Basic CPU info. You can swap this for lscpu /proc parsing later.
+    """
+    
+    cmd = "command -v lscpu >/dev/null 2>&1 && lscpu || grep -m1 'model name' /proc/cpuinfo"
+    base = _run_shell(cmd)
+    base["meta"]["desc"] = "CPU information"
+    return base
 
 
-def network_info():
-    result = subprocess.run("ip a", shell=True, capture_output=True, text=True)
-    console.print(result.stdout)
+def disk_usage() -> Dict[str, Any]:
+    cmd = "df -h"
+    base = _run_shell(cmd)
+    base["meta"]["desc"] = "Disk usage (df -h)"
+    return base
 
 
-def running_processes():
-    result = subprocess.run("ps -eo pid,cmd,%cpu,%mem --sort=-%cpu | head", 
-                            shell=True, capture_output=True, text=True)
-    console.print(result.stdout)
+def uptime() -> Dict[str, Any]:
+    cmd = "uptime"
+    base = _run_shell(cmd)
+    base["meta"]["desc"] = "System uptime"
+    return base
 
 
-def uptime():
-    result = subprocess.run("uptime -p", shell=True, capture_output=True, text=True)
-    console.print(f"[cyan]System Uptime:[/cyan] {result.stdout}")
+def running_processes() -> Dict[str, Any]:
+    
+    cmd = "ps aux --sort=-%mem | head -n 15"
+    base = _run_shell(cmd)
+    base["meta"]["desc"] = "Top processes by memory"
+    return base
 
 
-def disk_usage():
-    result = subprocess.run("df -h", shell=True, capture_output=True, text=True)
-    console.print(result.stdout)
+def network_info() -> Dict[str, Any]:
+    
+    cmd = "command -v ip >/dev/null 2>&1 && ip a || ifconfig"
+    base = _run_shell(cmd)
+    base["meta"]["desc"] = "Network interfaces"
+    return base
 
 
-def cpu_usage():
-    result = subprocess.run("top -bn1 | grep 'Cpu(s)'", shell=True,
-                            capture_output=True, text=True)
-    console.print(result.stdout)
+def ping_test() -> Dict[str, Any]:
+    
+    cmd = "ping -c 4 8.8.8.8"
+    base = _run_shell(cmd)
+    base["meta"]["desc"] = "Ping test to 8.8.8.8"
+    return base
 
 
-def cpu_info():
-    result = subprocess.run("lscpu", shell=True, capture_output=True, text=True)
-    console.print(result.stdout)
-
-
+def os_info() -> Dict[str, Any]:
+    cmd = "uname -a"
+    base = _run_shell(cmd)
+    base["meta"]["desc"] = "OS / kernel information"
+    return base
 
 
 def handle_intent(intent: str, user_input: Optional[str] = None):
-    if intent == "memory script": return memory_script
-    if intent == "cpu info": return cpu_info
-    if intent == "disk usage": return disk_usage
-    if intent == "uptime": return uptime
-    if intent == "process list": return running_processes
-    if intent == "network info": return network_info
-    if intent == "ping test": return ping_test
-    if intent == "os info": return os_info
+    """
+    Map an intent string to the underlying command function.
+    Returns a callable, or None if we don't know this intent.
+    """
+    table = {
+        "memory script": memory_script,
+        "cpu info": cpu_info,
+        "disk usage": disk_usage,
+        "uptime": uptime,
+        "process list": running_processes,
+        "network info": network_info,
+        "ping test": ping_test,
+        "os info": os_info,
+    }
 
-    console.print(f"[yellow]Unknown intent[/yellow] {intent}")
-    return None
+    fn = table.get(intent)
+    return fn
